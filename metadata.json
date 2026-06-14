@@ -1,0 +1,6 @@
+{
+  "name": "Fashion Store Admin Dashboard",
+  "description": "An elegant, high-performance administrative panel for managing collections, products, variants, orders, and reviews.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
