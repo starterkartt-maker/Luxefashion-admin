@@ -10,7 +10,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Loader2, ArrowLeft, Upload, Trash2 } from "lucide-react";
+import { Loader2, ArrowLeft, Upload, Trash2, Sparkles } from "lucide-react";
+import HomepageSectionSelector from "@/components/HomepageSectionSelector";
 
 const collectionSchema = z.object({
   name: z.string().min(1, "Name is required"),
@@ -266,6 +267,24 @@ export default function EditCollection() {
             </div>
           </div>
         </div>
+
+        {!isNew && (
+          <div className="pt-6 border-t border-gray-150 dark:border-zinc-800">
+            <HomepageSectionSelector itemId={id} type="collections" />
+          </div>
+        )}
+
+        {isNew && (
+          <div className="pt-6 border-t border-gray-150 dark:border-zinc-800 p-4 rounded-xl bg-amber-50/20 border border-amber-900/10">
+            <div className="flex gap-2 items-center text-amber-850 dark:text-amber-400 font-semibold text-xs mb-1">
+              <Sparkles className="h-4 w-4 animate-pulse text-amber-500" />
+              <span>Configure Homescreen Visibility</span>
+            </div>
+            <p className="text-xs text-muted-foreground dark:text-zinc-400">
+              Save this collection first to enable adding it directly to your Home Screen sections!
+            </p>
+          </div>
+        )}
 
         <div className="pt-6 border-t border-gray-150 dark:border-zinc-800 flex justify-end">
           <Button

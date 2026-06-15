@@ -18,7 +18,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Loader2, ArrowLeft, Upload, Plus, Trash2 } from "lucide-react";
+import { Loader2, ArrowLeft, Upload, Plus, Trash2, Sparkles } from "lucide-react";
+import HomepageSectionSelector from "@/components/HomepageSectionSelector";
 
 const productSchema = z.object({
   name: z.string().min(1, "Name is required"),
@@ -413,6 +414,12 @@ export default function EditProduct() {
             >
               Variants
             </TabsTrigger>
+            <TabsTrigger
+              className="data-[state=active]:bg-gray-100 text-amber-600 dark:text-amber-500 font-semibold"
+              value="homepage"
+            >
+              <Sparkles className="h-3.5 w-3.5 mr-1" /> Home Screen
+            </TabsTrigger>
           </TabsList>
           <Button
             onClick={handleSubmit(onSubmit)}
@@ -711,6 +718,21 @@ export default function EditProduct() {
                   ))
                 )}
               </div>
+            </TabsContent>
+            <TabsContent value="homepage" className="space-y-6 mt-0">
+              {!isNew ? (
+                <HomepageSectionSelector itemId={id} type="products" />
+              ) : (
+                <div className="p-4 rounded-xl bg-amber-50/20 border border-amber-900/10 whitespace-normal">
+                  <div className="flex gap-2 items-center text-amber-850 dark:text-amber-400 font-semibold text-xs mb-1">
+                    <Sparkles className="h-4 w-4 animate-pulse text-amber-500" />
+                    <span>Configure Homescreen Visibility</span>
+                  </div>
+                  <p className="text-xs text-muted-foreground dark:text-zinc-400">
+                    Save this product first to enable adding it directly to your Home Screen sections!
+                  </p>
+                </div>
+              )}
             </TabsContent>
         </div>
       </Tabs>
