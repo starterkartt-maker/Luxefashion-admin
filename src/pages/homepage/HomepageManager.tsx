@@ -19,7 +19,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { Input } from "@/components/ui/input";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   Dialog,
   DialogContent,
@@ -40,6 +40,9 @@ export default function HomepageManager() {
   const [selectedCollections, setSelectedCollections] = useState<string[]>([]);
   const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
 
+  // Highly-reactive section contents map to ensure counts update instantly on screen
+  const [sectionContents, setSectionContents] = useState<Record<string, { product_ids: string[]; collection_ids: string[]; category_ids: string[] }>>({});
+
   // Queries
   const { data: sections, isLoading } = useQuery({
     queryKey: ["homepage_sections"],
@@ -52,6 +55,31 @@ export default function HomepageManager() {
       return data;
     },
   });
+
+  // Populate reactive sectionContents dictionary when sections are loaded
+  useEffect(() => {
+    if (sections) {
+      const contents: Record<string, { product_ids: string[]; collection_ids: string[]; category_ids: string[] }> = {};
+      sections.forEach((section: any) => {
+        const saved = localStorage.getItem(`homepage_section_content_${section.id}`);
+        if (saved) {
+          try {
+            const parsed = JSON.parse(saved);
+            contents[section.id] = {
+              product_ids: parsed.product_ids || [],
+              collection_ids: parsed.collection_ids || [],
+              category_ids: parsed.category_ids || [],
+            };
+          } catch (e) {
+            contents[section.id] = { product_ids: [], collection_ids: [], category_ids: [] };
+          }
+        } else {
+          contents[section.id] = { product_ids: [], collection_ids: [], category_ids: [] };
+        }
+      });
+      setSectionContents(contents);
+    }
+  }, [sections]);
 
   const { data: allProducts } = useQuery({
     queryKey: ["products_all"],
@@ -103,8 +131,22 @@ export default function HomepageManager() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["homepage_sections"] });
       setNewTitle("");
-      toast.success("Section added");
+      toast.success("Section added successfully!");
     },
+    onError: (error: any) => {
+      console.error("Error adding homepage section:", error);
+      toast.error(
+        <div>
+          <p className="font-semibold">Unable to add section to Database</p>
+          <p className="text-xs opacity-90 mt-0.5">{error.message || "Request failed"}</p>
+          {error.code === "42501" && (
+            <div className="mt-1.5 p-1 pb-1 px-1.5 bg-amber-50 dark:bg-amber-950/20 text-[10px] text-amber-850 dark:text-amber-400 rounded-sm">
+              💡 RLS Policy Triggered: Enable INSERT capability for anonymous or authenticated administrators on the `homepage_sections` database table.
+            </div>
+          )}
+        </div>
+      );
+    }
   });
 
   const toggleActive = useMutation({
@@ -117,7 +159,17 @@ export default function HomepageManager() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["homepage_sections"] });
+      toast.success("Visibility updated!");
     },
+    onError: (error: any) => {
+      console.error("Error toggling section visibility:", error);
+      toast.error(
+        <div>
+          <p className="font-semibold">Unable to update section visibility</p>
+          <p className="text-xs opacity-90 mt-0.5">{error.message}</p>
+        </div>
+      );
+    }
   });
 
   const deleteMutation = useMutation({
@@ -130,41 +182,94 @@ export default function HomepageManager() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["homepage_sections"] });
-      toast.success("Section deleted");
+      toast.success("Section deleted successfully");
     },
+    onError: (error: any) => {
+      console.error("Error deleting section:", error);
+      toast.error(
+        <div>
+          <p className="font-semibold">Could not delete section</p>
+          <p className="text-xs opacity-90 mt-0.5">{error.message}</p>
+        </div>
+      );
+    }
   });
 
   // Section content helpers
   const openManagement = (sectionId: string) => {
     setActiveSectionId(sectionId);
     setActiveTab("products");
-    const saved = localStorage.getItem(`homepage_section_content_${sectionId}`);
-    if (saved) {
-      try {
-        const parsed = JSON.parse(saved);
-        setSelectedProducts(parsed.product_ids || []);
-        setSelectedCollections(parsed.collection_ids || []);
-        setSelectedCategories(parsed.category_ids || []);
-      } catch (e) {
+    
+    // Read from state first, fallback to localStorage
+    const cached = sectionContents[sectionId];
+    if (cached) {
+      setSelectedProducts(cached.product_ids || []);
+      setSelectedCollections(cached.collection_ids || []);
+      setSelectedCategories(cached.category_ids || []);
+    } else {
+      const saved = localStorage.getItem(`homepage_section_content_${sectionId}`);
+      if (saved) {
+        try {
+          const parsed = JSON.parse(saved);
+          setSelectedProducts(parsed.product_ids || []);
+          setSelectedCollections(parsed.collection_ids || []);
+          setSelectedCategories(parsed.category_ids || []);
+        } catch (e) {
+          setSelectedProducts([]);
+          setSelectedCollections([]);
+          setSelectedCategories([]);
+        }
+      } else {
         setSelectedProducts([]);
         setSelectedCollections([]);
         setSelectedCategories([]);
       }
-    } else {
-      setSelectedProducts([]);
-      setSelectedCollections([]);
-      setSelectedCategories([]);
     }
   };
 
-  const saveSectionContent = () => {
+  const saveSectionContent = async () => {
     if (!activeSectionId) return;
     const payload = {
       product_ids: selectedProducts,
       collection_ids: selectedCollections,
       category_ids: selectedCategories,
     };
+    
+    // Save to localStorage immediately
     localStorage.setItem(`homepage_section_content_${activeSectionId}`, JSON.stringify(payload));
+    
+    // Update local state reactive store immediately so the numbers change on screen in real-time
+    setSectionContents(prev => ({
+      ...prev,
+      [activeSectionId]: payload
+    }));
+
+    // Attempt to persist the chosen associations to the backend `homepage_section_products` database too
+    try {
+      // Clear out former maps
+      const { error: clearErr } = await supabase
+        .from("homepage_section_products")
+        .delete()
+        .eq("section_id", activeSectionId);
+
+      if (!clearErr && selectedProducts.length > 0) {
+        const rows = selectedProducts.map((pId, idx) => ({
+          section_id: activeSectionId,
+          product_id: pId,
+          sort_order: idx
+        }));
+        const { error: insErr } = await supabase
+          .from("homepage_section_products")
+          .insert(rows);
+
+        if (insErr) {
+          console.warn("Could not save section-product maps in Supabase backend (probably permission or RLS issue). Saving locally only.", insErr.message);
+        }
+      }
+    } catch (dbErr) {
+      console.warn("Backend database save failed, fell back peacefully to local store update.", dbErr);
+    }
+
     toast.success("Section content updated successfully!");
     setActiveSectionId(null);
   };
@@ -254,19 +359,11 @@ export default function HomepageManager() {
         ) : (
           <div className="space-y-3">
             {sections?.map((section) => {
-              // Retrieve configured counts for display
-              let productCount = 0;
-              let collectionCount = 0;
-              let categoryCount = 0;
-              const saved = localStorage.getItem(`homepage_section_content_${section.id}`);
-              if (saved) {
-                try {
-                  const parsed = JSON.parse(saved);
-                  productCount = parsed.product_ids?.length || 0;
-                  collectionCount = parsed.collection_ids?.length || 0;
-                  categoryCount = parsed.category_ids?.length || 0;
-                } catch (e) {}
-              }
+              // Retrieve configured counts for display reactively from state
+              const content = sectionContents[section.id] || { product_ids: [], collection_ids: [], category_ids: [] };
+              const productCount = content.product_ids?.length || 0;
+              const collectionCount = content.collection_ids?.length || 0;
+              const categoryCount = content.category_ids?.length || 0;
 
               return (
                 <div
