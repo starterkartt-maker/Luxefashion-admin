@@ -27,7 +27,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Badge } from "@/components/ui/badge";
-import { Switch } from "@/components/ui/switch"; // wait, didn't add switch. I will use checkbox or add switch.
+import { Checkbox } from "@/components/ui/checkbox";
 import { Loader2, MoreHorizontal, Plus, Search, Sparkles } from "lucide-react";
 import { toast } from "sonner";
 import {
@@ -45,6 +45,64 @@ export default function ProductsList() {
   const [search, setSearch] = useState("");
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [homeSelectProductId, setHomeSelectProductId] = useState<string | null>(null);
+  const [selectedProductIds, setSelectedProductIds] = useState<string[]>([]);
+  const [isBulkDeleteOpen, setIsBulkDeleteOpen] = useState(false);
+  const [isBulkDeleting, setIsBulkDeleting] = useState(false);
+
+  const handleBulkActivate = async () => {
+    if (selectedProductIds.length === 0) return;
+    const toastId = toast.loading(`Activating ${selectedProductIds.length} products...`);
+    try {
+      const { error } = await supabase
+        .from("products")
+        .update({ active: true })
+        .in("id", selectedProductIds);
+      if (error) throw error;
+      
+      queryClient.invalidateQueries({ queryKey: ["products"] });
+      toast.success(`Activated ${selectedProductIds.length} products successfully!`, { id: toastId });
+      setSelectedProductIds([]);
+    } catch (e: any) {
+      toast.error(e.message || "Failed to update status", { id: toastId });
+    }
+  };
+
+  const handleBulkDeactivate = async () => {
+    if (selectedProductIds.length === 0) return;
+    const toastId = toast.loading(`Deactivating ${selectedProductIds.length} products...`);
+    try {
+      const { error } = await supabase
+        .from("products")
+        .update({ active: false })
+        .in("id", selectedProductIds);
+      if (error) throw error;
+
+      queryClient.invalidateQueries({ queryKey: ["products"] });
+      toast.success(`Deactivated ${selectedProductIds.length} products successfully!`, { id: toastId });
+      setSelectedProductIds([]);
+    } catch (e: any) {
+      toast.error(e.message || "Failed to update status", { id: toastId });
+    }
+  };
+
+  const handleBulkDelete = async () => {
+    if (selectedProductIds.length === 0) return;
+    setIsBulkDeleting(true);
+    const toastId = toast.loading(`Deleting ${selectedProductIds.length} products...`);
+    try {
+      // Run sequential/all deletes using deleteProduct helper
+      await Promise.all(selectedProductIds.map((id) => deleteProduct(id)));
+      
+      queryClient.invalidateQueries({ queryKey: ["products"] });
+      setSelectedProductIds([]);
+      toast.success(`Deleted ${selectedProductIds.length} products successfully!`, { id: toastId });
+      setIsBulkDeleteOpen(false);
+    } catch (e: any) {
+      toast.error(e.message || "Failed to delete products", { id: toastId });
+    } finally {
+      setIsBulkDeleting(false);
+    }
+  };
 
   // Load homepage sections to match active homepage placements on product rows
   const { data: homeSections } = useQuery({
@@ -123,7 +181,7 @@ export default function ProductsList() {
         </Link>
       </div>
 
-      <div className="flex items-center gap-2">
+      <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-4">
         <div className="relative flex-1 max-w-sm">
           <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
           <Input
@@ -134,12 +192,62 @@ export default function ProductsList() {
             onChange={(e) => setSearch(e.target.value)}
           />
         </div>
+
+        {selectedProductIds.length > 0 && (
+          <div className="flex items-center gap-2 bg-amber-50 dark:bg-amber-950/20 border border-amber-200/50 dark:border-amber-900/35 px-3 py-1.5 rounded-lg animate-in fade-in slide-in-from-top-1 dur-150">
+            <span className="text-xs font-semibold text-amber-800 dark:text-amber-400">
+              {selectedProductIds.length} Selected
+            </span>
+            <div className="h-4 w-px bg-amber-200 dark:bg-amber-900" />
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={handleBulkActivate}
+              className="text-xs h-7 px-2 font-semibold text-emerald-700 hover:text-emerald-800 hover:bg-emerald-50 dark:text-emerald-400 dark:hover:bg-emerald-950/30"
+            >
+              Activate Selected
+            </Button>
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={handleBulkDeactivate}
+              className="text-xs h-7 px-2 font-semibold text-amber-700 hover:text-amber-800 hover:bg-amber-50 dark:text-amber-400 dark:hover:bg-amber-950/30"
+            >
+              Deactivate Selected
+            </Button>
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={() => setIsBulkDeleteOpen(true)}
+              className="text-xs h-7 px-2 font-semibold text-red-700 hover:text-red-800 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-950/30"
+            >
+              Delete Selected
+            </Button>
+          </div>
+        )}
       </div>
 
       <div className="bg-white rounded-md border text-sm">
         <Table>
           <TableHeader>
             <TableRow>
+              <TableHead className="w-[50px] px-4">
+                <Checkbox
+                  checked={
+                    filteredProducts.length > 0 &&
+                    filteredProducts.every((p: any) =>
+                      selectedProductIds.includes(p.id)
+                    )
+                  }
+                  onCheckedChange={(checked) => {
+                    if (checked) {
+                      setSelectedProductIds(filteredProducts.map((p: any) => p.id));
+                    } else {
+                      setSelectedProductIds([]);
+                    }
+                  }}
+                />
+              </TableHead>
               <TableHead>Name</TableHead>
               <TableHead>Category</TableHead>
               <TableHead>Price</TableHead>
@@ -151,7 +259,7 @@ export default function ProductsList() {
           <TableBody>
             {isLoading ? (
               <TableRow>
-                <TableCell colSpan={6} className="h-24 text-center">
+                <TableCell colSpan={7} className="h-24 text-center">
                   <div className="flex justify-center">
                     <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
                   </div>
@@ -160,7 +268,7 @@ export default function ProductsList() {
             ) : filteredProducts.length === 0 ? (
               <TableRow>
                 <TableCell
-                  colSpan={6}
+                  colSpan={7}
                   className="h-24 text-center text-muted-foreground"
                 >
                   No products found.
@@ -176,6 +284,20 @@ export default function ProductsList() {
 
                 return (
                   <TableRow key={product.id}>
+                    <TableCell className="px-4">
+                      <Checkbox
+                        checked={selectedProductIds.includes(product.id)}
+                        onCheckedChange={(checked) => {
+                          if (checked) {
+                            setSelectedProductIds([...selectedProductIds, product.id]);
+                          } else {
+                            setSelectedProductIds(
+                              selectedProductIds.filter((id) => id !== product.id)
+                            );
+                          }
+                        }}
+                      />
+                    </TableCell>
                     <TableCell className="font-medium">
                       <div className="space-y-1">
                         <span className="block font-semibold">{product.name}</span>
@@ -272,6 +394,15 @@ export default function ProductsList() {
         title="Delete Product"
         description="Are you sure you want to delete this product? All image records, metadata, and variants associated with this product will also be deleted."
         isDeleting={deleteMutation.isPending}
+      />
+
+      <DeleteConfirmationDialog
+        isOpen={isBulkDeleteOpen}
+        onClose={() => setIsBulkDeleteOpen(false)}
+        onConfirm={handleBulkDelete}
+        title="Delete Selected Products"
+        description={`Are you sure you want to permanently delete the ${selectedProductIds.length} selected products? All image records, metadata, reviews, and variants associated with these products will also be deleted.`}
+        isDeleting={isBulkDeleting}
       />
 
       <Dialog open={!!homeSelectProductId} onOpenChange={(open) => !open && setHomeSelectProductId(null)}>

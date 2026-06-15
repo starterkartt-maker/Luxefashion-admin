@@ -29,9 +29,18 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+
 export default function HomepageManager() {
   const queryClient = useQueryClient();
   const [newTitle, setNewTitle] = useState("");
+  const [sectionType, setSectionType] = useState("products");
   const [activeTab, setActiveTab] = useState<"products" | "collections" | "categories">("products");
 
   // Section Content Management States
@@ -121,11 +130,11 @@ export default function HomepageManager() {
   });
 
   const addMutation = useMutation({
-    mutationFn: async (title: string) => {
+    mutationFn: async ({ title, type }: { title: string; type: string }) => {
       const count = sections?.length || 0;
       const { error } = await supabase
         .from("homepage_sections")
-        .insert([{ title, active: true, sort_order: count }]);
+        .insert([{ title, active: true, sort_order: count, section_type: type }]);
       if (error) throw error;
     },
     onSuccess: () => {
@@ -328,16 +337,26 @@ export default function HomepageManager() {
             <p className="text-xs text-muted-foreground">Add, structure and toggle active visibility of featured grids.</p>
           </div>
           
-          <div className="flex items-center gap-2 max-w-sm">
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 max-w-xl">
             <Input
-              placeholder="New Section (e.g. New Arrivals)"
+              placeholder="New Section Name (e.g. Mens Wear)"
               value={newTitle}
               onChange={(e) => setNewTitle(e.target.value)}
-              className="h-9 dark:bg-zinc-850 dark:border-zinc-800"
+              className="h-9 min-w-[200px] dark:bg-zinc-850 dark:border-zinc-800"
             />
+            <Select value={sectionType} onValueChange={setSectionType}>
+              <SelectTrigger className="h-9 w-[130px] dark:bg-zinc-850 dark:border-zinc-800">
+                <SelectValue placeholder="Select type" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="products">Products</SelectItem>
+                <SelectItem value="collections">Collections</SelectItem>
+                <SelectItem value="categories">Categories</SelectItem>
+              </SelectContent>
+            </Select>
             <Button
               size="sm"
-              onClick={() => newTitle && addMutation.mutate(newTitle)}
+              onClick={() => newTitle && addMutation.mutate({ title: newTitle, type: sectionType })}
               disabled={addMutation.isPending || !newTitle}
               className="h-9 font-sans text-xs uppercase tracking-wide gap-1 bg-black text-white dark:bg-zinc-50 dark:text-zinc-950 dark:hover:bg-zinc-200"
             >

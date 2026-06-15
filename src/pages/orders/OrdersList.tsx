@@ -26,167 +26,15 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, Search, Eye, Sparkles, ShoppingBag } from "lucide-react";
+import { Loader2, Search, Eye } from "lucide-react";
 import { toast } from "sonner";
 
 export default function OrdersList() {
   const queryClient = useQueryClient();
   const [search, setSearch] = useState("");
   const [selectedOrder, setSelectedOrder] = useState<any>(null);
-  const [isGenerating, setIsGenerating] = useState(false);
 
-  const handleGenerateSampleOrders = async () => {
-    setIsGenerating(true);
-    const toastId = toast.loading("Connecting to store database...");
-
-    try {
-      // 1. Fetch products to build orders containing real items
-      const { data: products, error: prodErr } = await supabase
-        .from("products")
-        .select("id, name, base_price")
-        .limit(6);
-
-      if (prodErr) throw new Error("Could not find products catalog: " + prodErr.message);
-
-      if (!products || products.length === 0) {
-        toast.error("Please add some products in the Products section before creating sample orders.", { id: toastId });
-        setIsGenerating(false);
-        return;
-      }
-
-      // 2. Fetch or create mock profiles
-      let profilesToUse: any[] = [];
-      const { data: existingProfs } = await supabase
-        .from("profiles")
-        .select("id, email, full_name")
-        .limit(5);
-
-      if (existingProfs && existingProfs.length > 0) {
-        profilesToUse = existingProfs;
-      } else {
-        // Try inserting mock profiles
-        const mockCustomers = [
-          { name: "Aarav Mehta", email: "aarav.mehta@example.com", phone: "+91 98123 45678" },
-          { name: "Ananya Sharma", email: "ananya.sharma@example.com", phone: "+91 99123 45678" },
-          { name: "Kabir Malhotra", email: "kabir.m@example.com", phone: "+91 97123 45678" }
-        ];
-
-        for (const c of mockCustomers) {
-          const profileId = "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (ch) => {
-            const r = Math.random() * 16 | 0, v = ch === "x" ? r : (r & 0x3 | 0x8);
-            return v.toString(16);
-          });
-
-          const { data: newProf, error: profErr } = await supabase
-            .from("profiles")
-            .insert({
-              id: profileId,
-              email: c.email,
-              full_name: c.name,
-              phone: c.phone
-            })
-            .select()
-            .single();
-
-          if (!profErr && newProf) {
-            profilesToUse.push(newProf);
-          }
-        }
-      }
-
-      // Ultimate fallback
-      if (profilesToUse.length === 0) {
-        const { data: { user } } = await supabase.auth.getUser();
-        if (user) {
-          profilesToUse.push({
-            id: user.id,
-            email: user.email,
-            full_name: "Admin Tester"
-          });
-        } else {
-          profilesToUse.push({
-            id: "00000000-0000-0000-0000-000000000000",
-            email: "guest@example.com",
-            full_name: "Guest Tester"
-          });
-        }
-      }
-
-      toast.loading("Generating 5 realistic orders...", { id: toastId });
-
-      const statuses = ["pending", "confirmed", "shipped", "delivered"];
-      const payMethods = ["cod", "razorpay"];
-
-      // 3. Create 5 sample orders
-      for (let i = 0; i < 5; i++) {
-        const profile = profilesToUse[Math.floor(Math.random() * profilesToUse.length)];
-        const itemsCount = Math.floor(Math.random() * 2) + 1; // 1 to 2 items
-        
-        const selectedProducts: any[] = [];
-        const shuffled = [...products].sort(() => 0.5 - Math.random());
-        for (let j = 0; j < Math.min(itemsCount, shuffled.length); j++) {
-          selectedProducts.push(shuffled[j]);
-        }
-
-        let total = 0;
-        const itemsPayload = selectedProducts.map(p => {
-          const qty = Math.floor(Math.random() * 2) + 1;
-          const price = p.base_price || 999;
-          total += qty * price;
-          return {
-            product_id: p.id,
-            quantity: qty,
-            unit_price: price
-          };
-        });
-
-        const { data: order, error: ordErr } = await supabase
-          .from("orders")
-          .insert({
-            user_id: profile.id,
-            total_amount: total,
-            subtotal: total,
-            status: statuses[Math.floor(Math.random() * statuses.length)],
-            payment_status: "paid",
-            payment_method: payMethods[Math.floor(Math.random() * payMethods.length)],
-            created_at: new Date(Date.now() - Math.floor(Math.random() * 6) * 86400000).toISOString()
-          })
-          .select()
-          .single();
-
-        if (ordErr) {
-          console.warn("Could not insert order: ", ordErr.message);
-          continue;
-        }
-
-        if (order) {
-          const itemsToInsert = itemsPayload.map(item => ({
-            ...item,
-            order_id: order.id
-          }));
-
-          const { error: itemsErr } = await supabase
-            .from("order_items")
-            .insert(itemsToInsert);
-
-          if (itemsErr) {
-            console.warn("Could not insert order items: ", itemsErr.message);
-          }
-        }
-      }
-
-      toast.success("Successfully generated and populated 5 demo orders!", { id: toastId });
-      queryClient.invalidateQueries({ queryKey: ["orders"] });
-      queryClient.invalidateQueries({ queryKey: ["dashboard_full_stats"] });
-    } catch (err: any) {
-      console.error(err);
-      toast.error("Failed to generate orders: " + (err.message || String(err)), { id: toastId });
-    } finally {
-      setIsGenerating(false);
-    }
-  };
-
-  const { data: orders, isLoading } = useQuery({
+  const { data: orders, isLoading, error } = useQuery({
     queryKey: ["orders"],
     queryFn: async () => {
       const { data: ordersData, error: ordersError } = await supabase
@@ -273,22 +121,6 @@ export default function OrdersList() {
             Manage and process customer orders.
           </p>
         </div>
-        
-        {orders && orders.length > 0 && (
-          <Button
-            onClick={handleGenerateSampleOrders}
-            disabled={isGenerating}
-            variant="outline"
-            className="flex items-center gap-1.5 text-xs text-amber-600 dark:text-amber-400 border-amber-200 hover:bg-amber-50/50 dark:hover:bg-amber-950/20"
-          >
-            {isGenerating ? (
-              <Loader2 className="h-3.5 w-3.5 animate-spin" />
-            ) : (
-              <Sparkles className="h-3.5 w-3.5 text-amber-500 animate-pulse" />
-            )}
-            Populate Demo Orders
-          </Button>
-        )}
       </div>
 
       <div className="flex items-center gap-2">
@@ -323,39 +155,22 @@ export default function OrdersList() {
                   <Loader2 className="h-6 w-6 animate-spin mx-auto text-muted-foreground" />
                 </TableCell>
               </TableRow>
+            ) : error ? (
+              <TableRow>
+                <TableCell
+                  colSpan={6}
+                  className="h-24 text-center text-red-500 font-semibold px-4"
+                >
+                  Error loading orders: {(error as any).message || String(error)}
+                </TableCell>
+              </TableRow>
             ) : filteredOrders.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={6} className="h-80 text-center p-8">
-                  <div className="max-w-md mx-auto flex flex-col items-center justify-center space-y-4">
-                    <div className="p-3 bg-amber-50 dark:bg-amber-950/30 rounded-full border border-amber-200/50 dark:border-amber-900/30">
-                      <ShoppingBag className="h-8 w-8 text-amber-600 dark:text-amber-450 animate-bounce" />
-                    </div>
-                    <div className="space-y-1.5">
-                      <h3 className="font-semibold text-gray-900 dark:text-zinc-50 text-base">
-                        No orders in the database
-                      </h3>
-                      <p className="text-xs text-muted-foreground px-4 leading-relaxed">
-                        There are currently no rows in your Supabase <code>orders</code> database table. Seed realistic test orders instantly to test order metrics, client invoices, state updates, and overview performance!
-                      </p>
-                    </div>
-                    <Button
-                      onClick={handleGenerateSampleOrders}
-                      disabled={isGenerating}
-                      className="bg-black text-white dark:bg-amber-600 dark:hover:bg-amber-700 hover:bg-neutral-800 transition-colors uppercase tracking-wider text-xs font-semibold py-2 px-5 mt-2"
-                    >
-                      {isGenerating ? (
-                        <>
-                          <Loader2 className="h-3.5 w-3.5 animate-spin mr-2" />
-                          Populating orders...
-                        </>
-                      ) : (
-                        <>
-                          <Sparkles className="h-3.5 w-3.5 mr-2 text-yellow-300 animate-pulse" />
-                          Generate 5 Sample Orders
-                        </>
-                      )}
-                    </Button>
-                  </div>
+                <TableCell
+                  colSpan={6}
+                  className="h-24 text-center text-muted-foreground"
+                >
+                  No orders found.
                 </TableCell>
               </TableRow>
             ) : (
