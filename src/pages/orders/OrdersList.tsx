@@ -37,19 +37,43 @@ export default function OrdersList() {
   const { data: orders, isLoading } = useQuery({
     queryKey: ["orders"],
     queryFn: async () => {
-      const { data, error } = await supabase
+      const { data: ordersData, error: ordersError } = await supabase
         .from("orders")
-        .select(
-          `
+        .select(`
           *,
-          profile:profiles(first_name, last_name, email),
           address:addresses(*),
           items:order_items(*, product:products(name))
-        `,
-        )
+        `)
         .order("created_at", { ascending: false });
-      if (error) throw error;
-      return data;
+
+      if (ordersError) throw ordersError;
+      if (!ordersData || ordersData.length === 0) return [];
+
+      const userIds = Array.from(new Set(ordersData.map((o: any) => o.user_id).filter(Boolean)));
+      const profilesMap: Record<string, any> = {};
+
+      if (userIds.length > 0) {
+        const { data: profilesData, error: profilesError } = await supabase
+          .from("profiles")
+          .select("id, email, phone, full_name, avatar_url")
+          .in("id", userIds);
+
+        if (profilesError) {
+          console.warn("Could not load profiles for orders:", profilesError.message);
+        } else if (profilesData) {
+          profilesData.forEach((profile: any) => {
+            profilesMap[profile.id] = profile;
+          });
+        }
+      }
+
+      return ordersData.map((o: any) => ({
+        ...o,
+        profile: profilesMap[o.user_id] || {
+          email: "guest@example.com",
+          full_name: "Guest Customer",
+        },
+      }));
     },
   });
 
@@ -70,9 +94,9 @@ export default function OrdersList() {
   const filteredOrders =
     orders?.filter(
       (o: any) =>
-        o.id.includes(search) ||
-        o.profile?.email?.includes(search) ||
-        o.profile?.first_name?.includes(search),
+        o.id.toLowerCase().includes(search.toLowerCase()) ||
+        o.profile?.email?.toLowerCase().includes(search.toLowerCase()) ||
+        o.profile?.full_name?.toLowerCase().includes(search.toLowerCase()),
     ) || [];
 
   const getStatusColor = (status: string) => {
@@ -148,7 +172,7 @@ export default function OrdersList() {
                     {new Date(o.created_at).toLocaleDateString()}
                   </TableCell>
                   <TableCell>
-                    {o.profile?.first_name} {o.profile?.last_name}
+                    {o.profile?.full_name || "Guest Customer"}
                     <div className="text-xs text-muted-foreground">
                       {o.profile?.email}
                     </div>
@@ -191,7 +215,7 @@ export default function OrdersList() {
                                   Customer Info
                                 </h4>
                                 <p>
-                                  {o.profile?.first_name} {o.profile?.last_name}
+                                  {o.profile?.full_name || "Guest Customer"}
                                 </p>
                                 <p className="text-muted-foreground">
                                   {o.profile?.email}
