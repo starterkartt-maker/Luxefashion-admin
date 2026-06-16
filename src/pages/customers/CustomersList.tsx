@@ -76,8 +76,7 @@ export default function CustomersList() {
           if (!profileMap.has(profileId)) {
             profileMap.set(profileId, {
               id: profileId,
-              first_name: prof?.first_name || "Guest",
-              last_name: prof?.last_name || "Customer",
+              full_name: prof?.full_name || "Guest Customer",
               email: prof?.email || "no-email@example.com",
               phone: prof?.phone || "",
               created_at: prof?.created_at || order.created_at,
@@ -105,8 +104,7 @@ export default function CustomersList() {
     customers?.filter(
       (c: any) =>
         c.email?.toLowerCase().includes(search.toLowerCase()) ||
-        c.first_name?.toLowerCase().includes(search.toLowerCase()) ||
-        c.last_name?.toLowerCase().includes(search.toLowerCase()),
+        c.full_name?.toLowerCase().includes(search.toLowerCase()),
     ) || [];
 
   return (
@@ -176,9 +174,12 @@ export default function CustomersList() {
                     0,
                   ) || 0;
                 const initials =
-                  (
-                    (c.first_name?.[0] || "") + (c.last_name?.[0] || "")
-                  ).toUpperCase() ||
+                  (c.full_name || "")
+                    .split(" ")
+                    .map((n: string) => n[0])
+                    .join("")
+                    .substring(0, 2)
+                    .toUpperCase() ||
                   c.email?.[0]?.toUpperCase() ||
                   "?";
 
@@ -192,7 +193,7 @@ export default function CustomersList() {
                           </AvatarFallback>
                         </Avatar>
                         <span className="font-medium">
-                          {c.first_name} {c.last_name}
+                          {c.full_name || "Guest Customer"}
                         </span>
                       </div>
                     </TableCell>

@@ -19,21 +19,45 @@ export default function ReviewsList() {
   const queryClient = useQueryClient();
   const [deleteId, setDeleteId] = useState<string | null>(null);
 
-  const { data: reviews, isLoading } = useQuery({
+  const { data: reviews, isLoading, error } = useQuery({
     queryKey: ["reviews"],
     queryFn: async () => {
-      const { data, error } = await supabase
+      const { data: reviewsData, error: reviewsError } = await supabase
         .from("reviews")
-        .select(
-          `
+        .select(`
           *,
-          product:products(name),
-          profile:profiles(first_name, last_name)
-        `,
-        )
+          product:products(name)
+        `)
         .order("created_at", { ascending: false });
-      if (error) throw error;
-      return data;
+
+      if (reviewsError) throw reviewsError;
+      if (!reviewsData || reviewsData.length === 0) return [];
+
+      const userIds = Array.from(new Set(reviewsData.map((r: any) => r.user_id).filter(Boolean)));
+      const profilesMap: Record<string, any> = {};
+
+      if (userIds.length > 0) {
+        const { data: profilesData, error: profilesError } = await supabase
+          .from("profiles")
+          .select("id, email, phone, full_name")
+          .in("id", userIds);
+
+        if (profilesError) {
+          console.warn("Could not load profiles for reviews:", profilesError.message);
+        } else if (profilesData) {
+          profilesData.forEach((profile: any) => {
+            profilesMap[profile.id] = profile;
+          });
+        }
+      }
+
+      return reviewsData.map((r: any) => ({
+        ...r,
+        profile: profilesMap[r.user_id] || {
+          email: r.email || "guest@example.com",
+          full_name: r.reviewer_name || "Guest Customer",
+        },
+      }));
     },
   });
 
@@ -69,11 +93,17 @@ export default function ReviewsList() {
               <TableHead className="w-[80px]"></TableHead>
             </TableRow>
           </TableHeader>
-          <TableBody>
+           <TableBody>
             {isLoading ? (
               <TableRow>
                 <TableCell colSpan={6} className="h-24 text-center">
                   <Loader2 className="h-6 w-6 animate-spin mx-auto text-muted-foreground" />
+                </TableCell>
+              </TableRow>
+            ) : error ? (
+              <TableRow>
+                <TableCell colSpan={6} className="h-24 text-center text-red-500 font-semibold">
+                  Error loading reviews: {(error as any).message || String(error)}
                 </TableCell>
               </TableRow>
             ) : reviews?.length === 0 ? (
@@ -89,21 +119,26 @@ export default function ReviewsList() {
               reviews?.map((r: any) => (
                 <TableRow key={r.id}>
                   <TableCell>
-                    <div className="flex items-center gap-2">
-                      <span className="font-medium">
-                        {r.profile?.first_name} {r.profile?.last_name}
+                    <div className="flex flex-col gap-0.5">
+                      <div className="flex items-center gap-1.5">
+                        <span className="font-semibold">
+                          {r.profile?.full_name || "Guest Customer"}
+                        </span>
+                        {r.verified_purchase && (
+                          <CheckCircle2
+                            className="h-3.5 w-3.5 text-green-500"
+                            title="Verified Purchase"
+                          />
+                        )}
+                      </div>
+                      <span className="text-xs text-muted-foreground font-mono">
+                        {r.profile?.email || "No email available"}
                       </span>
-                      {r.is_verified_purchase && (
-                        <CheckCircle2
-                          className="h-3 w-3 text-green-500"
-                          title="Verified Purchase"
-                        />
-                      )}
                     </div>
                   </TableCell>
-                  <TableCell>{r.product?.name}</TableCell>
+                  <TableCell className="font-medium">{r.product?.name || "Deleted Product"}</TableCell>
                   <TableCell>
-                    <div className="flex text-amber-400">
+                    <div className="flex text-amber-450 drop-shadow-sm">
                       {[...Array(5)].map((_, i) => (
                         <Star
                           key={i}
@@ -113,12 +148,10 @@ export default function ReviewsList() {
                     </div>
                   </TableCell>
                   <TableCell
-                    className="max-w-[300px] truncate"
-                    title={r.comment}
+                    className="max-w-[320px]"
                   >
-                    <p className="font-semibold text-xs mb-1">{r.title}</p>
-                    <p className="text-xs text-muted-foreground truncate">
-                      {r.comment}
+                    <p className="text-xs text-zinc-700 dark:text-zinc-300 break-words whitespace-pre-wrap leading-relaxed">
+                      {r.review_text || r.comment || <span className="italic text-muted-foreground text-[11px]">No comment left</span>}
                     </p>
                   </TableCell>
                   <TableCell className="text-xs text-muted-foreground">
@@ -128,7 +161,7 @@ export default function ReviewsList() {
                     <Button
                       variant="ghost"
                       size="icon"
-                      className="text-red-500 hover:text-red-700 hover:bg-red-50"
+                      className="text-red-500 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-950/20"
                       onClick={() => setDeleteId(r.id)}
                     >
                       <Trash2 className="h-4 w-4" />

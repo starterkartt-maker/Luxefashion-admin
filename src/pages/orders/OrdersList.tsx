@@ -143,6 +143,7 @@ export default function OrdersList() {
               <TableHead>Order ID</TableHead>
               <TableHead>Date</TableHead>
               <TableHead>Customer</TableHead>
+              <TableHead>Products Ordered</TableHead>
               <TableHead>Total</TableHead>
               <TableHead>Status</TableHead>
               <TableHead className="w-[100px]"></TableHead>
@@ -151,14 +152,14 @@ export default function OrdersList() {
           <TableBody>
             {isLoading ? (
               <TableRow>
-                <TableCell colSpan={6} className="h-24 text-center">
+                <TableCell colSpan={7} className="h-24 text-center">
                   <Loader2 className="h-6 w-6 animate-spin mx-auto text-muted-foreground" />
                 </TableCell>
               </TableRow>
             ) : error ? (
               <TableRow>
                 <TableCell
-                  colSpan={6}
+                  colSpan={7}
                   className="h-24 text-center text-red-500 font-semibold px-4"
                 >
                   Error loading orders: {(error as any).message || String(error)}
@@ -167,7 +168,7 @@ export default function OrdersList() {
             ) : filteredOrders.length === 0 ? (
               <TableRow>
                 <TableCell
-                  colSpan={6}
+                  colSpan={7}
                   className="h-24 text-center text-muted-foreground"
                 >
                   No orders found.
@@ -183,9 +184,29 @@ export default function OrdersList() {
                     {new Date(o.created_at).toLocaleDateString()}
                   </TableCell>
                   <TableCell>
-                    {o.profile?.full_name || "Guest Customer"}
+                    <span className="font-semibold text-gray-900 dark:text-zinc-100">
+                      {o.profile?.full_name || "Guest Customer"}
+                    </span>
                     <div className="text-xs text-muted-foreground">
                       {o.profile?.email}
+                    </div>
+                  </TableCell>
+                  <TableCell>
+                    <div className="max-w-[280px] space-y-1.5 py-1">
+                      {o.items && o.items.length > 0 ? (
+                        o.items.map((item: any, idx: number) => (
+                          <div key={item.id || idx} className="text-xs leading-normal flex items-start gap-1">
+                            <span className="font-bold text-gray-800 dark:text-zinc-200 shrink-0">
+                              {item.quantity}×
+                            </span>
+                            <span className="text-zinc-650 dark:text-zinc-400 break-words">
+                              {item.product?.name || `Product ID: ${item.product_id?.substring(0, 8)}...`}
+                            </span>
+                          </div>
+                        ))
+                      ) : (
+                        <span className="text-xs text-muted-foreground italic">No items found</span>
+                      )}
                     </div>
                   </TableCell>
                   <TableCell className="font-medium">
